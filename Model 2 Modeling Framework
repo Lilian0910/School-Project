@@ -1,0 +1,41 @@
+kable(head(diamonds,3))
+# 2.1 simple random sampling
+set.seed(61710)
+split = sample(x = 1:nrow(diamonds), size = 0.7*nrow(diamonds))
+
+train = diamonds[split,]
+test = diamonds[-split,]
+
+# 2.2 Stratified sampling(Numeric outcome)
+library(caret)
+set.seed(61710)
+split = createDataPartition(y = diamonds$price, p = 0.7, list =F, groups = 50)
+train = diamonds[split,]
+test = diamonds[-split,]
+
+# 2.3 Stratified sampling(Categorical outcome)
+#There’s no groups parameter in function
+diamonds$price_hilo = ifelse(diamonds$price>mean(diamonds$price), 'High', 'Low')
+
+set.seed(61710)
+split = createDataPartition(y = diamonds$price_hilo, p = 0.7, list = F)
+
+train = diamonds[split,]
+test = diamonds[-split,]
+
+kable(prop.table(rbind(train = table(train$price_hilo),
+                 test = table(test$price_hilo)),
+           margin = 1))
+
+# 2.4 Stratified sampling using caTools (Categorical outcome)
+library(caTools)
+set.seed(61710)
+split = sample.split(Y = diamonds$price_hilo, SplitRatio = 0.7)
+kable(table(split))
+train = diamonds[split,]
+test = diamonds[!split,]
+
+kable(prop.table(rbind(train = table(train$price_hilo),
+                 test = table(test$price_hilo)),
+           margin = 1))
+
