@@ -1,0 +1,139 @@
+wine = read.table("AAclasses/framework/module5/winequality-white.csv",header=TRUE,sep=";")
+kable(head(wine,3))
+# Split Data
+
+library(caret)
+set.seed(1031)
+split = createDataPartition(y=wine$quality,p = 0.7,list = F,groups = 100)
+train = wine[split,]
+test = wine[-split,]
+
+# 5.1 Manual Approach
+# Predictors used in a model must be
+  # Relevant: Related to the outcome variable, and
+  # Non-redundant: Not related to other predictors
+
+# 5.1.1 Correlation Plot
+corMatrix = as.data.frame(cor(train[,-12]))
+corMatrix$var1 = rownames(corMatrix)
+
+corMatrix %>%
+  gather(key=var2,value=r,1:11)%>%
+  arrange(var1,desc(var2))%>%
+  ggplot(aes(x=var1,y=reorder(var2, order(var2,decreasing=F)),fill=r))+
+  geom_tile()+
+  geom_text(aes(label=round(r,2)),size=3)+
+  scale_fill_gradientn(colours = c('#d7191c','#fdae61','#ffffbf','#a6d96a','#1a9641'))+
+  theme(axis.text.x=element_text(angle=75,hjust = 1))+xlab('')+ylab('')
+
+library(corrplot)
+corrplot(cor(train[,-12]),method = 'square',type = 'lower',diag = F)
+
+# 5.1.2 VIF
+#One way to assess the threat of multicollinearity in a linear regression is to compute the Variance Inflating Factor (VIF). 1<VIF<Inf. VIF>10 indicates seious multicollinearity while 5<VIF<10 may warrant examination.
+model = lm(quality~., train)
+library(car)
+kable(vif(model))
+
+# 5.2 Best Subset Selection
+library(leaps)
+subsets = regsubsets(quality~., data = train, nvmax=11)
+summary(subsets)
+names(summary(subsets))
+subsets_measures= data.frame(model=1:length(summary(subsets)$cp),
+                             cp = summary(subsets)$cp,
+                             bic = summary(subsets)$bic,
+                             adjr2 = summary(subsets)$adjr2)
+kable(subsets_measures)
+
+subsets_measures %>%
+  gather(key = type, value = value, 2:4)%>%
+  ggplot(aes(x =model, y = value))+
+  geom_line()+
+  geom_point()+
+  facet_grid(type~., scales = 'free_y')
+which.min(summary(subsets)$cp)
+coef(subsets, which.min(summary(subsets)$cp))
+
+###############################################################
+#5.3 Forward/Backward/Stepwise Selection
+# Forward
+start_mod = lm(quality~1,data=train)
+empty_mod = lm(quality~1,data=train)
+full_mod = lm(quality~.,data=train)
+forwardStepwise = step(start_mod,
+                       scope=list(upper=full_mod,lower=empty_mod),
+                       direction='forward')
+# Backward
+start_mod = lm(quality~.,data=train)
+empty_mod = lm(quality~1,data=train)
+full_mod = lm(quality~.,data=train)
+backwardStepwise = step(start_mod,
+                        scope=list(upper=full_mod,lower=empty_mod),
+                        direction='backward')
+# Stepwise
+start_mod = lm(quality~1,data=train)
+empty_mod = lm(quality~1,data=train)
+full_mod = lm(quality~.,data=train)
+hybridStepwise = step(start_mod,
+                      scope=list(upper=full_mod,lower=empty_mod),
+                      direction='both')
+summary(forwardStepwise)
+summary(backwardStepwise)
+summary(hybridStepwise)
+
+# 5.4 Ridge
+# For Ridge, firstly transform features into model.matrix, while extract target variable. Use glmnet package here.
+library(glmnet)
+x = model.matrix(quality~.-1,data=train)
+y = train$quality
+ridgeModel = glmnet(x,y,alpha=0)
+plot(ridgeModel,xvar='lambda',label=T)
+
+# For cv.glmnet, default is 10-fold cross validation
+set.seed(617)
+cv.ridge = cv.glmnet(x,y,alpha=0) 
+plot(cv.ridge)
+coef(cv.ridge)
+
+# 5.5 Lasso
+lassoModel = glmnet(x,y, alpha=1) 
+plot(lassoModel,xvar='lambda',label=T)
+plot(lassoModel,xvar='dev',label=T)
+set.seed(617)
+cv.lasso = cv.glmnet(x,y,alpha=1) # 10-fold cross-validation
+plot(cv.lasso)
+coef(cv.lasso)
+##################################################################
+
+# 5.6 PCA
+# Extract the predictors to be reduced.
+
+trainPredictors = train[,-12]
+testPredictors = test[,-12]
+# Conduct Principal Components Analysis on train sample. Principal components analysis will always generate as many components as variables.
+pca = prcomp(trainPredictors,scale. = T)
+train_components = data.frame(pca$x[,1:6], quality = train$quality)
+kable(head(train_components,4))
+
+# Construct a model using the components derived from the original predictors
+train_model = lm(quality~.,train_components)
+summary(train_model)
+
+# Before we can apply the train model to the test set, we need to ensure that we apply the same variable transformations for the train sample on the test sample.
+# Specifically, we need to apply the same component structure from the train sample predictors to the test predictors.
+# Note, we are not running a fresh principal components analysis on the test sample, rather we are imposing the train component structure on the test sample.
+
+test_pca = predict(pca,newdata=testPredictors)
+test_components = data.frame(cbind(test_pca[,1:6], quality = test$quality))
+
+# Note, train_components and test_components have the same structure.
+str(train_components)
+str(test_components)
+
+# Finally, we evaluate the estimated train model on the test data to assess model performance.
+pred = predict(train_model,newdata=test_components)
+sse = sum((pred-test_components$quality)^2)
+sst = sum((mean(train_components$quality) - test_components$quality)^2)
+r2_test = 1 - sse/sst
+r2_test
