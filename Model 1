@@ -1,0 +1,244 @@
+# 1.1 descriptive measures
+# 1.1.1 numeric variables
+calculate_mode <- function(x){
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x,ux)))]
+}
+calculate_mode(mtcars$mpg)
+# Percentile
+quantile(mtcars$mpg, 0.05)
+IQR(mtcars$mpg)
+# summary
+summary(mtcars$mpg)
+
+# 1.1.2 categorical variables
+# frequency
+table(mtcars$cyl)
+# Using dplyr
+mtcars%>%
+  group_by(cyl)%>%
+  summarise(cyl_count = n())
+  # Metrics
+tapply(mtcars$mpg, INDEX = mtcars$cyl, FUN = 'mean')
+# Using dplyr
+mtcars%>%
+  group_by(cyl)%>%
+  summarise(avg_mpg = mean(mpg))
+  
+# 1.2 visual summary
+# 1.2.1 some geom
+ggplot(data =mpg, aes(x = hwy, color = factor(year)))+
+  geom_freqpoly(size = 1.2)
+  
+ggplot(data =mpg, aes(x = factor(year), y = hwy))+
+geom_boxplot(outlier.color = 'red')+
+geom_text(data = mpg[mpg$hwy>quantile(mpg$hwy, 0.99),], aes(label = manufacturer), nudge_x = 0.2)
+  
+g1 = ggplot(data = mpg, aes(x = factor(year), y = hwy))+
+  geom_bar(stat = 'summary', fun.y = 'median')
+g2 = ggplot(data =mpg, aes(x = factor(cyl),fill = factor(year), y = hwy))+
+  geom_bar(stat = 'summary', fun.y = 'mean')
+g3 = ggplot(data =mpg, aes(x = factor(cyl),fill = factor(year), y = hwy))+
+  geom_bar(stat = 'summary', fun.y = 'mean', position = 'dodge')
+# to drop 5 cyl cars
+g4 = ggplot(data = mpg[!mpg$cyl == 5,], aes(x = factor(cyl), fill = factor(year), y = hwy))+
+  geom_bar(stat = 'summary', fun.y = 'mean', position = 'dodge')
+library(gridExtra)
+grid.arrange(g1,g2,g3,g4)
+
+# 1.2.2 position
+set.seed(100)
+data = data.frame(hi_lo=sample(c('high','low'),20,replace = T),y=1:20,on_off=rep(c('on','off'),10))
+g1 = ggplot(data=data,aes(x=hi_lo,y=y,fill=on_off))+
+  geom_bar(stat = 'summary',fun.y=mean,position='stack')+
+  ggtitle(label='position = stack')+guides(fill=F)
+g2 = ggplot(data=data,aes(x=hi_lo,y=y,fill=on_off))+
+  geom_bar(stat = 'summary',fun.y=mean,position='dodge')+
+  ggtitle(label='position = dodge')+guides(fill=F)
+g3 = ggplot(data=data,aes(x=hi_lo,y=y,fill=on_off))+
+  geom_bar(stat = 'summary',fun.y=mean,position='fill')+
+  ggtitle(label='position = fill')+guides(fill=F)
+g4 = ggplot(data=data,aes(x=hi_lo,y=y,fill=on_off))+
+  geom_bar(stat = 'summary',fun.y=mean,position='jitter')+
+  ggtitle(label='position = jitter')+guides(fill=F)
+g5 = ggplot(data=data,aes(x=hi_lo,y=y,fill=on_off))+
+  geom_bar(stat = 'summary',fun.y=mean,position='identity')+
+  ggtitle(label='position = identity')+guides(fill=F)
+grid.arrange(g1, g2, g3, g4, g5)
+
+# 1.2.3 Aesthetics
+temp = data.frame(x=c('1','2','3','4','5'),y=1:5)
+g1 = ggplot(data=temp,aes(x=x,y=y,color=x))+
+  geom_point(size=14)+
+  scale_colour_discrete(guide=F)+
+  ggtitle('color')+
+  ylim(0,6)
+g3 = ggplot(data=temp,aes(x=x,y=y,size=y^3))+
+  geom_point(color='violetred1')+
+  scale_size(guide=F)+
+  ggtitle('size')+
+  ylim(0,6)
+g4 = ggplot(data=temp,aes(x=x,y=y,alpha=y))+
+  geom_point(size=14,color='violetred1')+
+  scale_alpha(guide=F)+
+  ggtitle('alpha')+
+  ylim(0,6)
+g5 = ggplot(data=temp,aes(x=x,y=y,shape=x))+
+  geom_point(size=14,color='violetred1')+
+  scale_shape(guide=F)+
+  ggtitle('shape')+
+  ylim(0,6)
+chart = grid.arrange(g1,g3,g4,g5)
+
+# 1.2.4 Facets and Wraps
+# a row of charts
+ggplot(data=mpg,aes(x=displ,y=hwy))+
+  geom_point()+
+  facet_grid(.~cyl)
+# a column of charts
+ggplot(data=mpg,aes(x=displ,y=hwy))+
+  geom_point()+
+  facet_grid(cyl~.)
+
+## facet_wrap() will organize charts left to right and then start again in the next line from left to right.##
+
+ggplot(data=mpg,aes(x=displ,y=hwy))+
+  geom_point()+
+  facet_wrap(~cyl)
+ggplot(data=mpg,aes(x=displ,y=hwy))+
+  geom_point()+
+  facet_grid(cyl~year)
+
+# 1.2.5 geom_illustration
+ggplot(data=mpg,aes(x=displ,y=hwy))+
+  geom_point(color='violetred2',size=0.9)+
+  geom_smooth(method='lm',size=1.2,color='blue',se = F)+
+  geom_hline(yintercept=mean(mpg$hwy),size=1.1,color='lightblue')
+
+# 1.3 data transformation
+set.seed(617)
+coupons = data.frame(id = 1:100,
+                     c1 = round(runif(100,1,5),0),
+                     c2 = round(runif(100,1,5),0),
+                     c3 = round(runif(100,1,7),0),
+                     c4 = round(runif(100,1,7),0),
+                     c5 = round(runif(100,1,7),0))
+knitr::kable(head(coupons))
+# Examine the mean and variance of each item.
+result = apply(coupons[,2:6],
+               MARGIN =2,
+               FUN = function(x)c(round(mean(x),2), round(var(x),2)))
+rownames(result) = c('mean', 'var')
+knitr::kable(result)
+# standardize
+coupons_scaled = apply(X = coupons[,2:6],
+                       MARGIN = 2, 
+                       FUN = function(x) round(scale(x),2))
+coupons_scaled = data.frame(id = coupons$id, coupons_scaled)
+knitr::kable(head(coupons_scaled))
+# examine again
+result_scaled = apply(coupons_scaled[,2:6],
+                      MARGIN = 2,
+                      FUN = function(x) c(round(mean(x),2), round(var(x),2)))
+rownames(result_scaled) = c('mean', 'var')
+knitr::kable(result_scaled)
+# Coupon Index
+coupons_scaled$coupons_avg = rowMeans(coupons_scaled[,2:6])
+knitr::kable(head(coupons_scaled))
+
+# 1.3.1 using dplyr
+coupons_scaled_dplyr = 
+  coupons %>%
+  mutate(id = id,
+         c1_scaled=round(scale(c1),2),
+         c2_scaled=round(scale(c2),2),
+         c3_scaled=round(scale(c3),2),
+         c4_scaled=round(scale(c4),2),
+         c5_scaled=round(scale(c5),2))%>%
+  select(id,c1_scaled:c5_scaled)%>%
+  rowwise()%>%
+  mutate(coupons_avg = mean(c1_scaled:c5_scaled))
+
+knitr::kable(head(coupons_scaled_dplyr))
+
+# 1.3.2 binning
+coupons_scaled$coupons_avg_binned = cut(coupons_scaled$coupons_avg,
+                                         breaks = c(-5,-0.5,-0.25,0.25,0.5,5),
+                                         labels = c('Very Low','Low','Medium','High','Very High'))
+knitr::kable(coupons_scaled[1:10,7:8])
+ggplot(data=coupons_scaled,
+       aes(x=coupons_avg_binned,
+           y=length(coupons_avg_binned),
+           fill=coupons_avg_binned))+
+  geom_bar(stat='summary',fun.y='length',position='dodge')+
+  guides(fill=F)
+#combining levels
+coupons_scaled$coupons_avg_binned_combined = coupons_scaled$coupons_avg_binned
+levels(coupons_scaled$coupons_avg_binned_combined) = c('Low','Low','Medium','High','High')
+
+# 1.4 data structure
+gdp = data.frame(c('USA','China','Japan'),
+           c(543300, 59716, 44307),
+           c(19390604, 12237700, 4872136))
+names(gdp) = c('Country','1960','2017')
+knitr::kable(gdp)
+
+# 1.4.1 wide to tall
+library(tidyr)
+gdp_tall = gdp%>%
+  gather('Year','GDP',2:3)
+knitr::kable(gdp_tall)
+
+#1.4.2 tall to wide
+gdp_wide = 
+  gdp_tall %>%
+  spread('Year', 'GDP')
+knitr::kable(gdp_wide)
+
+#1.4.3 example
+set.seed(617)
+coupons = data.frame(id = 1:100,
+                     c1 = round(runif(100,1,5),0),
+                     c2 = round(runif(100,1,5),0),
+                     c3 = round(runif(100,1,7),0),
+                     c4 = round(runif(100,1,7),0),
+                     c5 = round(runif(100,1,7),0))
+kable(head(coupons))
+# Wide to tall
+coupon_tall = gather(coupons, key = 'item', value = 'c', 2:6)
+kable(head(coupon_tall))
+ggplot(data = coupon_tall, aes(x = item, y = c, fill = item))+
+  geom_bar(stat = 'summary', position ='dodge', fun.y = 'mean')
+data %>%
+  gather('State','Number_of_Violent_Crimes',2:52)%>%
+  group_by(State)%>%
+  summarize(AverageViolentCrime = mean(Number_of_Violent_Crimes,na.rm=T))%>%
+  ggplot(aes(x=reorder(State,X = AverageViolentCrime), y=AverageViolentCrime,size=AverageViolentCrime,color=AverageViolentCrime))+
+  geom_point()+scale_color_continuous(low='white',high='red')+xlab('State')+ylab('Crime')+
+  coord_flip()
+
+# 1.5 missing values
+#create missing values
+mtcars_missing = mtcars
+mtcars_missing$mpg[c(3,6,8,14,21)] = NA
+#ignoring missing values
+mtcars[!is.na(mtcars_missing$mpg),]$mpg
+mean(mtcars_missing$mpg, na.rm = T)
+#Impute with mice and caret
+library(mice)
+mtcars_mice = mice::complete(mice(mtcars_missing,seed = 617))
+
+library(caret)
+set.seed(617)
+mtcars_caret = predict(preProcess(mtcars_missing,method = 'bagImpute'),newdata = mtcars_missing)
+mtcars_caret$mpg
+
+data.frame(original = mtcars$mpg,
+           missing = mtcars_missing$mpg,
+           mice_impute = mtcars_mice$mpg,
+           caret_impute = mtcars_caret$mpg)
+
+
+
+
+
