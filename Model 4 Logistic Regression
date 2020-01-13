@@ -1,0 +1,141 @@
+data = read.csv('AAclasses/framework/module4/eBayClean.csv')
+kable(head(data,3))
+
+#Split Data
+library(caTools)
+set.seed(617)
+split = sample.split(data$sold, SplitRatio = 0.7)
+train = data[split,]
+test = data[!split,]
+# examine
+nrow(train)+nrow(test)==nrow(data)
+
+# 4.1 EDA
+# 4.1.1 startprice
+train%>%
+  mutate(sold = factor(sold, labels = c('not sold', 'sold')))%>%
+  group_by(sold)%>%
+  summarise(avg_startprice = mean(startprice))%>%
+  ungroup()%>%
+  ggplot(aes(x = sold, y = avg_startprice, fill = sold))+
+  geom_col()+
+  geom_text(aes(x = sold, y = avg_startprice, 
+                label = paste0('$', round(avg_startprice,2),'  ')),
+                nudge_y = 25)+
+  ylab('startprice')+
+  coord_flip()+theme_bw()
+ 
+# 4.1.2 Color
+kable(tapply(train$sold, train$color, mean))  
+ggplot(data=train,aes(x=color,y=sold))+
+  geom_bar(stat='summary',
+           fun.y='mean',
+           fill=c('black','gold','grey40','purple','white'))+
+  coord_flip()
+
+# 4.2 Model1: sold~startprice
+model1 = glm(sold~startprice,data=train,family='binomial')
+model1  
+
+# What is the probability of an iPad priced at $200 selling?
+# There’re two ways of doing it. Enter coefficients into the model or use predict function.#  
+# 1
+exp(model1$coefficients[1]+model1$coefficients[2]*200)/(1+exp(model1$coefficients[1]+model1$coefficients[2]*200))
+# 2
+predict(model1, newdata =data.frame(startprice = 200), type = 'response')
+  
+# Specifically, what is the percent increase in likelihood of an iPad being sold with a $1 increase in startprice?
+# model1$coefficients[1] and summary(model1)$coef[1] actually could be regarded identical but is not in reality.
+# Likelihood is the odds here, which is e^(beta_0+beta_1*x)
+100*(exp(summary(model1)$coef[2])-1)
+
+# 4.3 Model2: price~storage
+levels(train$storage)
+model2 = glm(sold~storage, data = train, family = 'binomial')
+summary(model2)
+  
+##predict the probability of sale (sold=1) for an ipad with storage Less than 128 GB.  
+# Method1
+exp(model2$coef[1]+model2$coef[2]*1+model2$coef[3]*0)/
+  (1+exp(model2$coef[1]+model2$coef[2]*1+model2$coef[3]*0))
+
+# Method2
+predict(model2,newdata=data.frame(storage='Less than 128 GB'),type='response')
+
+# What does the coefficient of storage mean? Specifically, what is the chance of selling an iPad with storage Less than 128 GB (relative to 128GB storage)?
+summary(model2)$coef[2] # coefficient of storage "Less than 128 GB"  
+  
+# How many times better is the likelihood of selling an iPad with less than 128 GB vs an iPad with 128 GB of storage?
+exp(summary(model2)$coef[2]) 
+
+# Phrased differently, how much more is the likelihood of selling an iPad with less than 128 GB of storage relative to one with 128GB
+100*(exp(summary(model2)$coef[2])-1)
+
+# 4.4 **Model3: all predictor variables
+model3 = glm(sold~biddable+startprice+condition+cellular+carrier+color+
+               storage+productline+noDescription+upperCaseDescription+startprice_99end,
+             data=train,
+             family='binomial')
+# Is model3 better than the models 1 and 2? Compare AIC. Lower AIC, better the model.
+kable(data.frame(summary(model1)$aic, summary(model2)$aic, summary(model3)$aic))
+
+# 4.4.1 Predict
+pred = predict(model3, type = 'response')
+data.frame(sold = train$sold[1:5],
+           predicted_probability = pred[1:5])
+# To convert prediction probabilities to a binary outcome, one can use a cut off or threshold value.
+data.frame(sold = train$sold[1:5],
+           predicted_probability = pred[1:5],
+           prediciton_binary = as.integer(pred[1:5]>0.5))
+
+# 4.4.2 Accuracy
+pred = predict(model3, newdata =test, type = 'response')
+ct = table(sold = test$sold, predictions = as.numeric(pred>0.5))
+kable(ct)
+
+#Overall quality of predictions can be computed as the proportion of correct predictions, known as accuracy. Cost of false negatives can be accounted for by the Specificity and cost of false negatives by the Sensitivity.
+#1
+accuracy = sum(ct[1,1],ct[2,2])/nrow(test);accuracy
+#2
+accuracy = mean(test$sold==(pred>0.5));accuracy
+
+# Specificity: True negative rate
+# Sensitivity: True positive rate
+specificity = ct[1,1]/sum(ct[1,1],ct[1,2])
+sensitivity = ct[2,2]/sum(ct[2,1],ct[2,2])
+data.frame(specificity, sensitivity)
+
+# 4.4.3 Varying Cutoff Value
+acc = sapply(X = seq(0.050,0.95,0.01),
+       FUN = function(x) mean(as.integer(pred>x) == test$sold))
+
+ggplot(data=data.frame(cutoff=seq(0.05,0.95,0.01),
+                       accuracy=acc),
+       aes(x=cutoff,y=accuracy))+
+  geom_point()
+
+# 4.4.4 ROC
+# ROC curves allow us to visualize the impact of different thresholds on Specificity and Sensitivity. AUC is a model performance measure that is independent of any particular cutoff or threshold.
+library(ROCR)
+ROCRpred = prediction(pred, test$sold)
+ROCRperf = performance(ROCRpred,'tpr','fpr')
+plot(ROCRperf)
+plot(ROCRperf, colorize = T, print.cutoffs.at = seq(0,1,0.2), text.adj =c(-0.3,2), xlab = '1-Specificity', ylab = 'sensitivity')
+
+# Area Under the Curve (AUC)
+as.numeric(performance(ROCRpred,"auc")@y.values) # auc measure
+  
+# s a reference, here is what the ROC for a baseline model will look like
+
+baselinePred = pred*0
+ROCRpred = prediction(baselinePred,test$sold)
+ROCRperf = performance(ROCRpred,"tpr","fpr")
+plot(ROCRperf,xlab="1 - Specificity",ylab="Sensitivity") # relabeled axes  
+
+# Baseline AUC
+
+as.numeric(performance(ROCRpred,"auc")@y.values)
+  
+  
+  
+  
