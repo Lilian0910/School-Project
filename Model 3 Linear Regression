@@ -1,0 +1,139 @@
+wages = read.csv('AAclasses/framework/module3/wages.csv')
+kable(head(wages,3))
+
+# 3.1 Clean Data
+wages = wages[wages$earn>=0,]
+ggplot(wages, aes(x = '', y = earn))+
+  geom_boxplot(outlier.color ='red', outlier.alpha = 0.5, fill = 'cadetblue')+
+  geom_text(aes(x = '', y = median(wages$earn), label = median(wages$earn)), size = 3, hjust = 6)+
+  xlab(label = '')
+
+# 3.2 Models
+# 3.2.1 Simple Regression: earn = f(age)
+cor(wages$age, wages$earn)
+ggplot(data = wages, aes(x = age, y= earn))+
+  geom_point()+
+  geom_smooth(method = 'lm', size = 1.3, color = 'steelblue3')+
+  coord_cartesian(ylim = c(0,200000))
+
+#Estimate
+model1 = lm(earn~age, data = wages)
+paste('earn','=',round(coef(model1)[1],0),'+',round(coef(model1)[2],0),'age')
+
+#Prediction
+anova(model1)
+summary(model1)
+pred = predict(model1)
+kable(data.frame(earn = wages$earn[100:109], predictions = pred[100:109]))
+
+# r2
+sse = sum((pred-wages$earn)^2)
+sst = sum((mean(wages$earn)-wages$earn)^2)
+model1_r2 = 1-sse/sst;model1_r2
+
+# rmse
+sse1 = sse1 = sum((pred-wages$earn)^2)
+rmse1 = sqrt(mean((pred-wages$earn)^2))
+
+# Inference What would be the wage of a 35 year old person? One can answer this question by manually substituting 35 in the regression equation.
+model1$coef[1]+model1$coef[2]*35
+# `predict`
+predict(model1, newdata = data.frame(age = 35))
+
+# 3.2.2 Simple Regression (Categorical Predictor): earn = f(gender)
+#Visualize
+ggplot(data = wages, aes(x = gender, y = earn, fill =gender))+
+  geom_bar(stat = 'summary', fun.y = 'mean', position = 'dodge')+
+  guides(fill = F)
+
+# Add error bars to gain greater insight
+wages%>%
+  group_by(gender)%>%
+  summarise(meanEarn=mean(earn),earnLow=mean(earn)-1.96*sd(earn)/sqrt(n()),earnHigh=mean(earn)+1.96*sd(earn)/sqrt(n()))%>%
+  ungroup()%>%
+  ggplot(aes(x=gender,y=meanEarn))+
+  geom_errorbar(aes(ymin=earnLow,ymax=earnHigh),size=1.1)+
+  geom_line(aes(x=gender,y=meanEarn,group=1),linetype=3)+
+  geom_bar(data=wages,aes(x=gender,y=earn,alpha=0.2,fill=gender),stat='summary',fun.y='mean',position='dodge')+
+  guides(fill=F,alpha=F)
+
+# Estimate and Prediction
+model3 = lm(earn~gender, data= wages)
+pred = predict(model3)
+sse3 = sum((pred-wages$earn)^2)
+sst3 = sum((mean(wages$earn)-wages$earn)^2)
+model3_r2 = 1-sse3/sst3;model3_r2
+rmse3 = sqrt(mean((pred-wages$earn)^2));rmse3
+
+# 3.2.3 Model6: earn = f(height, gender, race, ed, age)
+# Estimate
+model6 = lm(earn~height+gender+race+ed+age, data = wages)
+# Summary
+summary(model6)
+# Prediction 
+pred = predict(model6)
+sse6 = sum((pred-wages$earn)^2)
+sst6 = sum((wages$earn-mean(wages$earn))^2)
+model6_r2 = 1-sse6/sst6;model6_r2
+# Rmse
+rmse6 = sqrt(mean((pred-wages$earn)^2));rmse6
+
+# Compare Effect of Variables
+library(lm.beta)
+lm.beta(model6)
+
+# 3.2.4 Model7 Interaction: earn = f(age, gender, age*gender)
+model7 = lm(earn~age+gender+age:gender, data =wages)
+# Visualize
+ggplot(aes(x = age, y = earn), data = wages)+
+  geom_point(aes(color = gender))+
+  geom_smooth(aes(color = gender), method = 'lm', size = 1.1, se = F)+
+  coord_cartesian(ylim = c(1, 200000))
+
+# 3.2.5 Model8 Non-linear Model: earn = f(age, age^2)
+model8 = lm(earn~poly(age,2), data= wages)
+pred = predict(model8)
+sse8 = sum((pred- wages$earn)^2)
+sst8 = sum((mean(wages$earn)-wages$earn)^2)
+model8_r2 = 1 - sse8/sst8;model8_r2
+rmse8 = sqrt(mean((pred- wages$earn)^2));rmse8
+
+#Visualize
+ggplot(aes(x = age, y =earn),data =wages)+
+  geom_point()+
+  geom_smooth(method = 'lm', formula = y~poly(x,2), size =1.3, se = F, color = 'steelblue3')+
+  coord_cartesian(ylim = c(1,200000))
+
+# 3.2.6 Model9: earn = f(height, gender, race, ed, age)
+# Split to train test 
+set.seed(617)
+split = sample(1:nrow(wages), 0.7*nrow(wages))
+train = wages[split,]
+test = wages[-split,]
+
+# Estimate model on train sample
+model9 = lm(earn~height+gender+race+ed+age, data= train)
+# Prediction: In-sample
+# Prediction: Out-of-sample
+
+# 3.2.7 Comparing Models
+model = c('model1', 'model2', 'model3', 'model4', 'model5', 'model6', 'model7', 'model8', 'model9')
+sse = c(sse1, sse2, sse3, sse4, sse5, sse6, sse7, sse8, sse9)
+rmse = c(rmse1, rmse2, rmse3, rmse4, rmse5, rmse6, rmse7, rmse8, rmse9)
+r2 = round(c(model1_r2, model2_r2, model3_r2, model4_r2, model5_r2, model6_r2, model7_r2, model8_r2, model9_r2),4)
+results = data.frame(model, sse, rmse, r2)
+
+library(tidyr); library(dplyr)
+results
+
+results%>%
+  gather(key = metric, value = value, 2:4)%>%
+  ggplot(aes(x = model, y = values))+
+  geom_bar(stat = 'identity', fill = 'cadetblue')+
+  facet_grid(metric~., scales = 'free_y')
+
+
+
+
+
+
