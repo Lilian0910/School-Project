@@ -1,0 +1,201 @@
+data = data.frame(x1=rnorm(100),x2=rnorm(100))
+data$y = factor(ifelse(data$x1>data$x2,0,1))
+
+kable(head(data,3))
+set.seed(0617)
+split = sample(1:nrow(data),0.7*nrow(data))
+train = data[split,]
+test = data[-split,]
+
+# 8.1 Linear SVM: cost =1
+# Fit an SVM model using the default cost of 1. In practice, variables are scaled, 
+# but here it has been set to F so that the upcoming graphs are more meaningful.
+library(e1071)
+svmLinear = svm(y~.,train,kernel='linear',scale=F,type='C-classification') # if outcome is a factor, default type='C-classification'
+summary(svmLinear)
+
+# Plot the Decision boundary. Note, svm comes with a plot function that constructs a decision boundary 
+# but we are manually constructing it here to draw a comparison with the charts above.
+# beta = t(svmLinear\(coefs) %*% svmLinear\)SV
+# slope = -beta[1]/beta[2]
+# intercept = svmLinear$rho/beta[2]
+
+beta = t(svmLinear$coefs) %*% svmLinear$SV
+slope = -beta[1]/beta[2]
+intercept = svmLinear$rho/beta[2]
+ggplot(train,aes(x=x1,y=x2,color=y))+
+  geom_point()+
+  guides(color=F)+
+  geom_abline(slope = slope,intercept = intercept,color='cadetblue', size=1)
+# Plot with Margins
+
+ggplot(train,aes(x=x1,y=x2,color=y))+
+  geom_point()+
+  guides(color=F)+
+  geom_abline(slope = slope,intercept = intercept,color='cadetblue', size=1)+
+  geom_abline(slope = slope,intercept = intercept-1/beta[2],color='rosybrown', size=1)+  
+  geom_abline(slope = slope,intercept = intercept+1/beta[2],color='rosybrown', size=1)
+# Here is the plot that comes with svm()
+plot(svmLinear, train)
+# Finally, examine the performance of the svm on train and test samples.
+pred = predict(svmLinear)
+table(pred, train$y)
+pred = predict(svmLinear, test)
+table(pred, test$y)
+
+# 8.2 Linear SVM: cost =100
+library(e1071)
+svmLinear = svm(y~.,train,kernel='linear',scale=F,type='C-classification',cost=100) # if outcome is a factor, default type='C-classification'
+beta = t(svmLinear$coefs) %*% svmLinear$SV
+slope = -beta[1]/beta[2]
+intercept = svmLinear$rho/beta[2]
+
+ggplot(train,aes(x=x1,y=x2,color=y))+
+  geom_point()+
+  guides(color=F)+
+  geom_abline(slope = slope,intercept = intercept,color='cadetblue', size=1)
+
+pred = predict(svmLinear)
+table(pred, train$y)
+pred = predict(svmLinear, test)
+table(pred, test$y)
+
+# 8.3 Linear SVM: tune for best cost
+svmTune = tune(method = svm, y~., data =train, kernel = 'linear', type = 'C-classification', scale = F, ranges= list(cost = c(0.01,0.1, 1, 10, 100)))
+svmTune$best.model
+pred = predict(svmTune$best.model, newdata =test)
+table(pred, test$y)
+plot(svmTune$best.model, test)
+
+# 8.4 SVM - Polynomial
+set.seed(0617)
+data = data.frame(x1=runif(200,-1,1),x2=runif(200,-1,1))
+radius = .8
+radius_squared = radius^2
+data$y <- factor(ifelse(data$x1^2+data$x2^2<radius_squared, 0, 1))
+split = sample(1:nrow(data),0.7*nrow(data))
+train = data[split,]
+test = data[-split,]
+
+ggplot(train,aes(x=x1,y=x2,color=y))+
+  geom_point()+
+  guides(color=F)+
+  geom_abline(slope = -1,intercept = 0.64,color='cadetblue', size=1)
+
+library(e1071)
+svmLinear = svm(y~.,data = train, kernel='linear',scale=F,type='C-classification')
+pred = predict(svmLinear)
+mean(pred==train$y)
+pred = predict(svmLinear,newdata=test)
+mean(pred==test$y)
+plot(svmLinear,train)
+
+svmPoly = svm(y~.,data = train, kernel='polynomial',scale=F,type='C-classification',degree=2)
+pred = predict(svmPoly)
+mean(pred==train$y)
+pred = predict(svmPoly,newdata=test)
+mean(pred==test$y)
+plot(svmPoly,train)
+
+# But, it is possible that the default parameters chosen aren’t optimal, so let us tune this model
+tune_svmPoly = tune(method = svm,y~.,data = train,kernel='polynomial',
+                    ranges= list(degree=c(2,3), cost = c(0.01, 0.1, 1), gamma=c(0,1,10), coef0=c(0,0.1,1,10)))
+summary(tune_svmPoly)
+tune_svmPoly$best.model
+pred = predict(tune_svmPoly$best.model)
+mean(pred==train$y)
+pred = predict(tune_svmPoly$best.model,newdata=test)
+mean(pred==test$y)
+plot(tune_svmPoly$best.model,train)
+
+# 8.5 SVM - Radial Basis Function
+svmRadial = svm(y~.,data = train, kernel='radial',scale=F,type='C-classification')
+pred = predict(svmRadial)
+mean(pred==train$y)
+pred = predict(svmRadial,newdata=test)
+mean(pred==test$y)
+plot(svmRadial,train)
+
+# Tune
+tune_svmRadial = tune(method='svm',y~.,data=train,kernel='radial', type='C-classification',
+                      ranges=list(cost=c(0.1,10,100), gamma=c(1,10), coef0 = c(0.1,1,10)))
+summary(tune_svmRadial$best.model)
+
+pred = predict(tune_svmRadial$best.model)
+mean(pred==train$y)
+pred = predict(tune_svmRadial$best.model,newdata=test)
+mean(pred==test$y)
+plot(tune_svmRadial$best.model,test)
+
+# 8.6 Illustration with wine dataset
+# Now, let’s use SVM to predict wine quality. 
+# First, we are going to convert the quality variable from the Wine data into a binary variable.
+# Read in the wine quality data using the following code: data = read.csv(‘winequality-white.csv,sep=’;’)
+
+data$quality = factor(ifelse(data$quality>mean(data$quality), 1, 0),labels = c('high','low'))
+library(caTools)
+set.seed(1706)
+split = sample.split(data$quality,SplitRatio = 0.7)
+train = data[split,]
+test = data[!split,]
+# We are now going to compare performance of Tree and a set of SVMs to predict wine quality using only alcohol and volatile.acidity
+
+# 8.6.1 Tree Model
+library(rpart)
+tree = rpart(quality~alcohol+volatile.acidity,train,method='class')
+pred = predict(tree,newdata=test,type = 'class')
+table(pred,test$quality)
+mean(pred==test$quality)
+
+# 8.6.2 Linear SVM
+svmLinear = svm(quality~alcohol+volatile.acidity,data = train,kernel='linear',type='C-classification')
+summary(svmLinear)
+pred = predict(svmLinear,newdata=test)
+table(pred,test$quality)
+mean(pred==test$quality)
+plot(svmLinear,test[,c('quality','alcohol','volatile.acidity')]) # decision boundary looks non-linear because original variables were scaled
+
+# 8.6.3 Linear SVM - Tuned
+svmLinearTune = tune(method = svm,quality~alcohol+volatile.acidity,data=train,kernel='linear',type='C-classification',ranges = list(cost=c(0.01, 0.1,1,10,100)))
+summary(svmLinearTune$best.model)
+pred = predict(svmLinearTune$best.model,newdata=test)
+table(pred,test$quality)
+mean(pred==test$quality)
+plot(svmLinearTune$best.model,test[,c('quality','alcohol','volatile.acidity')])
+
+# 8.6.4 Polynomial SVM
+svmPolynomial = svm(quality~alcohol+volatile.acidity,data = train,kernel='polynomial',degree=2,type='C-classification')
+summary(svmPolynomial)
+pred = predict(svmPolynomial,newdata=test)
+table(pred,test$quality)
+mean(pred==test$quality)
+plot(svmPolynomial,test[,c('quality','alcohol','volatile.acidity')])
+
+# 8.6.5 Polynomial SVM - Tuned
+svmPolynomialTune = tune(method = svm,quality~alcohol+volatile.acidity,data=train,kernel='polynomial',
+                         ranges=list(cost=c(0.01,1,100),degree=c(2,3)))
+summary(svmPolynomialTune$best.model)
+svmPolynomialTune$best.parameters
+pred = predict(svmPolynomialTune$best.model,newdata=test)
+table(pred,test$quality)
+mean(pred==test$quality)
+plot(svmPolynomialTune$best.model,test[,c('quality','alcohol','volatile.acidity')])
+
+# 8.6.6 Radial SVM
+svmRadial = svm(quality~alcohol+volatile.acidity,data = train,kernel='radial',type='C-classification')
+summary(svmRadial)
+pred = predict(svmRadial,newdata=test)
+table(pred,test$quality)
+mean(pred==test$quality)
+plot(svmRadial,test[,c('quality','alcohol','volatile.acidity')])
+
+# 8.6.7 Radial SVM- Tuned
+svmRadialTune = tune(method=svm,quality~alcohol+volatile.acidity,data=train,kernel='radial',type='C-classification',
+                     ranges = list(cost=c(0.1,10,100), gamma=c(1,10), coef0 = c(0.1,1,10)))
+summary(svmRadialTune$best.model)
+svmRadialTune$best.parameters
+pred = predict(svmRadialTune$best.model,newdata=test)
+table(pred,test$quality)
+mean(pred==test$quality)
+plot(svmRadialTune$best.model,test[,c('quality','alcohol','volatile.acidity')])
+
