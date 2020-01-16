@@ -1,0 +1,111 @@
+data = read.csv('AAclasses/framework/Module7/wages.csv')
+kable(head(data,3))
+# Split Data
+set.seed(617)
+split = sample(1:nrow(data),size = 250)
+train = data[split,]
+test = data[-split,]
+nrow(train)+nrow(test)==nrow(data)
+
+# 7.1 CART Models
+# 7.1.1 Default Tree
+library(rpart)
+library(rpart.plot)
+tree = rpart(earn~., data=train)
+predTree = predict(tree,newdata=test)
+rmseTree = sqrt(mean((predTree-test$earn)^2)); rmseTree
+
+# 7.1.2 Maximal Tree
+maximalTree = rpart(earn~.,data=train,control=rpart.control(minbucket=1))
+predMaximalTree = predict(maximalTree,newdata=test)
+rmseMaximalTree = sqrt(mean((predMaximalTree-test$earn)^2)); rmseMaximalTree
+
+# 7.2 Decision Tree with 10-fold cross-validation
+# Use train() function to compute the bestTune in cross-validation
+# Use rpart() function and the bestTune above to build a tree model
+library(caret)
+trControl = trainControl(method="cv",number = 10)
+tuneGrid = expand.grid(.cp = seq(0.001,0.1,0.001))
+set.seed(617)
+cvModel = train(earn~.,data=train,method="rpart",
+                trControl = trControl,tuneGrid = tuneGrid)
+cvModel$bestTune
+treeCV = rpart(earn~.,data=train,
+               control=rpart.control(cp = cvModel$bestTune))
+predTreeCV = predict(treeCV,newdata=test)
+rmseCV = sqrt(mean((predTreeCV-test$earn)^2)); rmseCV
+
+# 7.3 Bag Models
+library(randomForest)
+## randomForest 4.6-14
+## Type rfNews() to see new features/changes/bug fixes.
+## Attaching package: 'randomForest'
+## The following object is masked from 'package:gridExtra':
+##     combine
+## The following object is masked from 'package:ggplot2':
+##     margin
+## The following object is masked from 'package:dplyr':
+##     combine
+set.seed(617)
+bag = randomForest(earn~.,data=train,mtry = ncol(train)-1,ntree=1000)
+predBag = predict(bag,newdata=test)
+rmseBag = sqrt(mean((predBag-test$earn)^2)); rmseBag
+plot(bag)
+varImpPlot(bag)
+importance(bag)
+
+# 7.4 Random Forest Models
+library(randomForest)
+set.seed(617)
+forest = randomForest(earn~.,data=train,ntree = 1000)
+predForest = predict(forest,newdata=test)
+rmseForest = sqrt(mean((predForest-test$earn)^2)); rmseForest
+plot(forest)
+varImpPlot(forest); importance(forest)
+
+# 7.5 Random Forest with Cross-validation
+trControl=trainControl(method="cv",number=10)
+tuneGrid = expand.grid(mtry=1:5)
+set.seed(617)
+cvForest = train(earn~.,data=train,
+                 method="rf",ntree=1000,trControl=trControl,tuneGrid=tuneGrid )
+cvForest  # best mtry was 2
+
+set.seed(617)
+forest = randomForest(earn~.,data=train,ntree = 100,mtry=2)
+predForest = predict(forest,newdata=test)
+rmseForest = sqrt(mean((predForest-test$earn)^2)); rmseForest
+
+# 7.6 Boosting Models
+library(gbm)
+set.seed(617)
+boost = gbm(earn~.,data=train,distribution="gaussian",
+            n.trees = 100000,interaction.depth = 3,shrinkage = 0.001)
+predBoostTrain = predict(boost,n.trees = 100000)
+rmseBoostTrain = sqrt(mean((predBoostTrain-train$earn)^2)); rmseBoostTrain
+summary(boost)
+predBoost = predict(boost,newdata=test,n.trees = 10000)
+rmseBoost = sqrt(mean((predBoost-test$earn)^2)); rmseBoost
+
+# 7.7 Boosting With Cross-validation
+# Boosting models are notorious for overfitting, so it is best to cross-validate. However, bear in mind, tuning a boosting model can take a time and significant computational resources.
+
+library(caret)
+set.seed(617)
+trControl=trainControl(method="cv",number=10)
+
+tuneGrid=  expand.grid(n.trees = 1000, interaction.depth = c(1,2),
+                       shrinkage = (1:100)*0.01,n.minobsinnode=5)
+
+garbage = capture.output(cvBoost <- train(earn~.,data=train,method="gbm", 
+                trControl=trControl, tuneGrid=tuneGrid))
+
+boostCV = gbm(earn~.,data=train,distribution="gaussian",
+              n.trees=cvBoost$bestTune$n.trees,
+              interaction.depth=cvBoost$bestTune$interaction.depth,
+              shrinkage=cvBoost$bestTune$shrinkage,
+              n.minobsinnode = cvBoost$bestTune$n.minobsinnode)
+
+predBoostCV = predict(boostCV,test,n.trees=1000)
+rmseBoostCV = sqrt(mean((predBoostCV-test$earn)^2)); rmseBoostCV
+
