@@ -1,0 +1,73 @@
+data = read.csv("AAclasses/framework/Module6/eBayClean.csv")
+kable(head(data,3))
+# Split Data
+library(caTools)
+set.seed(617)
+split = sample.split(data$sold,SplitRatio = 0.7)
+train = data[split,]
+test = data[!split,]
+
+# 6.1 Classification Tree
+library(rpart)
+classTree1 = rpart(sold~startprice,data=train,method='class')
+library(rpart.plot)
+rpart.plot(classTree1)
+
+# 6.1.1 Predict
+# The default type = ‘prob’
+# To get a class prediction by setting type = ‘class’
+predict(classTree1,newdata = data.frame(startprice=150),type = 'prob')
+predict(classTree1, newdata = data.frame(startprice = 150), type = 'class')
+kable(predict(classTree1)[1:5,])
+
+# 6.2 Regression Tree1
+regTree1 = rpart(sold~startprice, data = train, method = 'anova')
+rpart.plot(regTree1)
+predict(regTree1, newdata = data.frame(startprice = 150))
+
+# 6.3 Make trees complex
+# cp: default is 0.005. In general, the smaller the value of cp, the larger the tree and the greater the complexity of the model.
+regTree1Complex = rpart(sold~startprice, train, cp =0.005)
+classTree3Complex = rpart(sold~startprice+biddable+condition+cellular+carrier+color+storage+productline+noDescription+upperCaseDescription+startprice_99end,
+                     data=train,
+                     method='class',
+                     control=rpart.control(minbucket = 25))
+# 6.3.1 Prediction
+classTree3 = rpart(sold~startprice+biddable+condition+cellular+carrier+color+storage+productline+noDescription+upperCaseDescription+startprice_99end,
+                   data=train,
+                   method='class')
+pred = predict(classTree3, type = 'class')
+ct = table(sold = train$sold, predictions = pred);ct
+
+# 6.3.2 Accuracy
+accuracy = sum(ct[1,1],ct[2,2])/nrow(train); accuracy
+specificity = ct[1,1]/sum(ct[1,1],ct[1,2]); specificity
+sensitivity = ct[2,2]/sum(ct[2,1],ct[2,2]); sensitivity
+
+# Method2
+accuracy = mean(train$sold == pred);accuracy
+
+# 6.3.3 Cutoff
+# As in the case of logistic regression, it is possible to manually set a cutoff or threshold for splitting probability of an iPad selling. Here, we illustrate this using a threshold of 0.6.
+pred = predict(classTree3, type = 'prob')
+ct = table(sold= train$sold, predictions = as.integer(pred[,2]>0.6));ct
+
+accuracy = sum(ct[1,1],ct[2,2])/nrow(train); accuracy
+specificity = ct[1,1]/sum(ct[1,1],ct[1,2]); specificity
+sensitivity = ct[2,2]/sum(ct[2,1],ct[2,2]); sensitivity
+# Method2
+accuracy = mean(train$sold == pred);accuracy
+
+# 6.3.4 ROC and AUC
+# ROC curves allow us to visualize the impact of different thresholds on Specificity and Sensitivity. 
+# AUC is a model performance measure that is independent of any particular cutoff or threshold.
+# Use prop here. And it’s the second column which we need
+# By default, a classification tree will generate class predictions. In order to construct an ROC curve, we need probability predictions, so we run predict with type=‘prob’ and use the predictions in the second column, i.e., pred[,2]. (It is possible to use regression tree predictions to construct an ROC curve but the curve and resultant AUC will be slightly different owing to differences in how a regression tree is optimized.)
+
+library(ROCR)
+pred = predict(classTree3,newdata=test,type='prob')
+ROCRpred = prediction(pred[,2],test$sold)
+ROCRperf = performance(ROCRpred,"tpr","fpr")
+plot(ROCRperf, colorize = T, print.cutoffs.at = seq(0,1,0.2), text.adj =c(-0.3,2), xlab = '1-Specificity', ylab = 'sensitivity')
+# AUC:
+as.numeric(performance(ROCRpred,"auc")@y.values) # auc measure
